@@ -1,0 +1,6 @@
+{
+  "name": "a7a5",
+  "dependencies": {
+    "@openzeppelin/contracts": "^5.2.0"
+  }
+}
