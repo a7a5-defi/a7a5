@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0
-pragma solidity ^0.8.28;
+pragma solidity =0.8.22;
 
 import {ERC721Enumerable, ERC721} from "@openzeppelin/contracts/token/ERC721/extensions/ERC721Enumerable.sol";
 import {IERC721} from "@openzeppelin/contracts/token/ERC721/IERC721.sol";
@@ -11,6 +11,7 @@ contract NFT is ERC721Enumerable {
     uint256 public lastTokenId;
 
     mapping(uint256 => string) public tokenCID;
+    mapping(string => bool) public cidExists;
 
     event Paused();
     event Unpaused();
@@ -21,6 +22,7 @@ contract NFT is ERC721Enumerable {
         address owner_,
         string memory baseUrl_
     ) ERC721(name_, symbol_) {
+        require(owner_ != address(0), "Owner should be non zero address");
         _owner = owner_;
         _baseUrl = baseUrl_;
     }
@@ -46,6 +48,7 @@ contract NFT is ERC721Enumerable {
     function tokenURI(
         uint256 _tokenId
     ) public view override returns (string memory) {
+        _requireOwned(_tokenId);
         string memory baseURI = _baseURI();
         string memory cid = tokenCID[_tokenId];
         return string.concat(baseURI, cid);
@@ -103,7 +106,9 @@ contract NFT is ERC721Enumerable {
     }
 
     function _setTokenCID(uint256 _tokenId, string memory _cid) internal {
+        require(cidExists[_cid] == false, "CID already exists");
         tokenCID[_tokenId] = _cid;
+        cidExists[_cid] = true;
     }
 
     function _baseURI() internal view override returns (string memory) {

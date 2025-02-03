@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0
-pragma solidity ^0.8.28;
+
+pragma solidity =0.8.22;
 
 interface IToken {
     function name() external view returns (string memory);
@@ -40,7 +41,7 @@ contract A7A5 is IToken {
     }
 
     modifier onlyCompliance() {
-        require(msg.sender == compliance, "not complience");
+        require(msg.sender == compliance, "not compliance");
         _;
     }
 
@@ -54,8 +55,8 @@ contract A7A5 is IToken {
         _;
     }
 
-    modifier notBlacklisted(address _user) {
-        require(!isBlackListed[_user]);
+    modifier notBlacklisted(address _from, address _to) {
+        require(!isBlackListed[_from] && !isBlackListed[_to], "User blacklisted");
         _;
     }
 
@@ -86,6 +87,9 @@ contract A7A5 is IToken {
         address compliance_,
         address accountant_
     ) {
+        require(owner_ != address(0), "Owner should be non zero address");
+        require(compliance_ != address(0), "Owner should be non zero address");
+        require(accountant_ != address(0), "Owner should be non zero address");
         _name = name_;
         _symbol = symbol_;
         _decimals = decimals_;
@@ -170,15 +174,15 @@ contract A7A5 is IToken {
     function transfer(
         address _to,
         uint256 _value
-    ) public whenNotPaused notBlacklisted(msg.sender) returns (bool) {
+    ) public whenNotPaused notBlacklisted(msg.sender, _to) returns (bool) {
         uint256 scaledAmount = getScaledAmount(_value);
         uint256 fee = (scaledAmount * basisPointsRate) / FEE_PRECISION;
         _transferShares(msg.sender, _to, scaledAmount - fee);
         if (fee > 0) {
             _transferShares(msg.sender, owner, fee);
-            emit Transfer(msg.sender, owner, _value);
+            emit Transfer(msg.sender, owner, getLiquidityAmount(fee));
         }
-        emit Transfer(msg.sender, _to, _value);
+        emit Transfer(msg.sender, _to, getLiquidityAmount(scaledAmount - fee));
         return true;
     }
 
@@ -186,27 +190,25 @@ contract A7A5 is IToken {
         address _from,
         address _to,
         uint256 _value
-    ) public whenNotPaused notBlacklisted(_from) returns (bool) {
+    ) public whenNotPaused notBlacklisted(_from, _to) returns (bool) {
         uint256 allowance_ = _allowances[_from][msg.sender];
         require(allowance_ >= _value, "allowance exceeded");
+        if (allowance_ < type(uint256).max) {
+            _allowances[_from][msg.sender] -= _value;
+        }
 
         uint256 scaledAmount = getScaledAmount(_value);
         uint256 fee = (scaledAmount * basisPointsRate) / FEE_PRECISION;
-        if (allowance_ < type(uint256).max) {
-            _allowances[_from][msg.sender] -= scaledAmount;
-        }
         _transferShares(_from, _to, scaledAmount - fee);
         if (fee > 0) {
             _transferShares(_from, owner, fee);
-            emit Transfer(_from, owner, _value);
+            emit Transfer(_from, owner, getLiquidityAmount(fee));
         }
-        emit Transfer(_from, _to, _value);
+        emit Transfer(_from, _to, getLiquidityAmount(scaledAmount - fee));
         return true;
     }
 
     function approve(address _spender, uint256 _value) public returns (bool) {
-        require(msg.sender != address(0), "can't approve by zero address");
-
         _allowances[msg.sender][_spender] = _value;
         emit Approval(msg.sender, _spender, _value);
         return true;
@@ -215,11 +217,13 @@ contract A7A5 is IToken {
     function transferScaled(
         address _to,
         uint256 _value
-    ) public whenNotPaused notBlacklisted(msg.sender) returns (bool) {
+    ) public whenNotPaused notBlacklisted(msg.sender, _to) returns (bool) {
         uint256 fee = (_value * basisPointsRate) / FEE_PRECISION;
         _transferShares(msg.sender, _to, _value - fee);
+        emit Transfer(msg.sender, _to, getLiquidityAmount(_value - fee));
         if (fee > 0) {
             _transferShares(msg.sender, owner, fee);
+            emit Transfer(msg.sender, owner, getLiquidityAmount(fee));
         }
         return true;
     }
@@ -228,17 +232,19 @@ contract A7A5 is IToken {
         address _from,
         address _to,
         uint256 _value
-    ) public whenNotPaused notBlacklisted(_from) returns (bool) {
+    ) public whenNotPaused notBlacklisted(_from, _to) returns (bool) {
         uint256 fee = (_value * basisPointsRate) / FEE_PRECISION;
         uint256 allowance_ = _allowances[_from][msg.sender];
         uint256 liquidityAmount = getLiquidityAmount(_value);
         require(allowance_ >= liquidityAmount, "allowance exceeded");
         if (allowance_ < type(uint256).max) {
-            _allowances[_from][msg.sender] -= _value;
+            _allowances[_from][msg.sender] -= liquidityAmount;
         }
         _transferShares(_from, _to, _value - fee);
+        emit Transfer(_from, _to, getLiquidityAmount(_value - fee));
         if (fee > 0) {
             _transferShares(_from, owner, fee);
+            emit Transfer(_from, owner, getLiquidityAmount(fee));
         }
         return true;
     }
@@ -255,6 +261,7 @@ contract A7A5 is IToken {
             );
             _totalLiquidity -= liquidityDecrease;
         }
+        require(_totalLiquidity >= totalSupply(), "Total liquidity must be more then total supply");
         emit TotalLiquidityUpdated(oldTotalLiquidity, _totalLiquidity);
     }
 
@@ -300,6 +307,7 @@ contract A7A5 is IToken {
         address _to,
         uint256 _sharesAmount
     ) internal returns (bool) {
+        require(_to != address(0), "Token receiver cannot be zero address");
         require(
             _shares[_from] >= _sharesAmount,
             "not enough shares for transfer"
