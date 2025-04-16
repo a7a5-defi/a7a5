@@ -126,11 +126,15 @@ contract A7A5 is IToken {
     }
 
     function totalSupply() public view override returns (uint256) {
-        return _totalSupply;
+        return _totalLiquidity;
     }
 
     function totalLiquidity() public view returns (uint256) {
         return _totalLiquidity;
+    }
+
+    function totalShares() public view returns (uint256) {
+        return _totalSupply;
     }
 
     function getScaledAmount(uint256 amount) public view returns (uint256) {
@@ -261,7 +265,7 @@ contract A7A5 is IToken {
             );
             _totalLiquidity -= liquidityDecrease;
         }
-        require(_totalLiquidity >= totalSupply(), "Total liquidity must be more then total supply");
+        require(_totalLiquidity >= _totalSupply, "Total liquidity must be more then total supply");
         emit TotalLiquidityUpdated(oldTotalLiquidity, _totalLiquidity);
     }
 
