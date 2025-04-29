@@ -1,12 +1,14 @@
-// SPDX-License-Identifier: GPL-3.0
-
 pragma solidity =0.8.20;
 
-import {Initializable} from "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
 import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 
-contract Swapper is Initializable {
+interface IUSDT {
+    function transfer(address to, uint256 value) external;
+    function transferFrom(address from, address to, uint256 value) external;
+}
+
+contract TronSwapper {
     using SafeERC20 for IERC20;
 
     // ownable
@@ -28,7 +30,7 @@ contract Swapper is Initializable {
     bool public paused = false;
 
     // events
-    event OnwterChanged(address indexed newOwner);
+    event OwnerChanged(address indexed newOwner);
     event OperatorChanged(address indexed newOperator);
     event Paused(bool paused);
     event SellA7A5RatioUpdated(uint256 newRatio);
@@ -58,14 +60,14 @@ contract Swapper is Initializable {
         _;
     }
 
-    function initialize (
+    constructor (
         address _owner,
         address _operator,
         address _a7a5,
         address _usdt,
         uint256 _sellA7A5Ratio,
         uint256 _buyA7A5Ratio
-    ) public initializer {
+    ) {
         require(_owner != address(0), "Owner should be non zero address");
         require(_operator != address(0), "Operator should be non zero address");
         owner = _owner;
@@ -79,7 +81,7 @@ contract Swapper is Initializable {
     function updateOwner(address newOwner) external onlyOwner {
         require(newOwner != address(0), "owner cannot be zero address");
         owner = newOwner;
-        emit OnwterChanged(newOwner);
+        emit OwnerChanged(newOwner);
     }
 
     function updateOperator(address newOperator) external onlyOwner {
@@ -100,7 +102,7 @@ contract Swapper is Initializable {
 
     function supplyUSDT(uint256 amount) external {
         require(amount > 0, "supply amount cannot be zero");
-        IERC20(usdt).safeTransferFrom(msg.sender, address(this), amount);
+        IUSDT(usdt).transferFrom(msg.sender, address(this), amount);
     }
 
     function supplyA7A5(uint256 amount) external {
@@ -110,7 +112,7 @@ contract Swapper is Initializable {
 
     function withdrawUSDT(uint256 amount) external onlyOwnerOrOperator {
         require(amount > 0, "withdraw amount cannot be zero");
-        IERC20(usdt).safeTransfer(msg.sender, amount);
+        IUSDT(usdt).transfer(msg.sender, amount);
     }
 
     function withdrawA7A5(uint256 amount) external onlyOwnerOrOperator {
@@ -142,7 +144,7 @@ contract Swapper is Initializable {
         uint256 usdtAmount = amountWithoutFee * sellA7A5Ratio / ratioDenominator;
         require(IERC20(usdt).balanceOf(address(this)) >= usdtAmount, "not enough tokens for swap");
         IERC20(a7a5).safeTransferFrom(msg.sender, address(this), a7a5Amount);
-        IERC20(usdt).safeTransfer(msg.sender, usdtAmount);
+        IUSDT(usdt).transfer(msg.sender, usdtAmount);
         emit Exchange(
             a7a5,
             usdt,
@@ -158,7 +160,7 @@ contract Swapper is Initializable {
         uint256 amountWithoutFee = usdtAmount * (FEE_DENOMINATOR - fee) / FEE_DENOMINATOR;
         uint256 a7a5Amount = amountWithoutFee * buyA7A5Ratio / ratioDenominator;
         require(IERC20(a7a5).balanceOf(address(this)) >= a7a5Amount, "not enough tokens for swap");
-        IERC20(usdt).safeTransferFrom(msg.sender, address(this), usdtAmount);
+        IUSDT(usdt).transferFrom(msg.sender, address(this), usdtAmount);
         IERC20(a7a5).safeTransfer(msg.sender, a7a5Amount);
         emit Exchange(
             usdt,
